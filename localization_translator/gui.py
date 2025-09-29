@@ -165,7 +165,7 @@ class TranslatorGUI(QWidget):
             data_rows = df.values.tolist()
             all_rows = [empty_row, field_row] + data_rows
             # 导出到同级目录
-            csv_path = os.path.splitext(self.csv_path)[0] + '_fromjson.csv'
+            csv_path = os.path.splitext(self.csv_path)[0] + '.csv'
             import csv
             with open(csv_path, 'w', encoding='utf-8-sig', newline='') as f:
                 writer = csv.writer(f)
