@@ -92,7 +92,7 @@ class TranslatorGUI(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        from PyQt5.QtWidgets import QHBoxLayout
+        from PyQt5.QtWidgets import QHBoxLayout, QLineEdit
         layout = QVBoxLayout()
 
         self.label = QLabel('请选择文件（CSV或JSON）：')
@@ -121,7 +121,30 @@ class TranslatorGUI(QWidget):
 
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(['Google', 'OpenAI'])
+        self.engine_combo.currentTextChanged.connect(self.on_engine_changed)
         layout.addWidget(self.engine_combo)
+
+        # Google API Key 区域
+        self.api_key_layout = QHBoxLayout()
+        self.api_key_label = QLabel('Google API Key JSON:')
+        self.api_key_layout.addWidget(self.api_key_label)
+        self.api_key_path = QLineEdit()
+        self.api_key_path.setPlaceholderText('拖拽或点击右侧按钮选择JSON')
+        self.api_key_path.setReadOnly(True)
+        self.api_key_path.setAcceptDrops(True)
+        self.api_key_path.installEventFilter(self)
+        self.api_key_layout.addWidget(self.api_key_path)
+        self.btn_browse_api = QPushButton('浏览')
+        self.btn_browse_api.clicked.connect(self.browse_api_key)
+        self.api_key_layout.addWidget(self.btn_browse_api)
+        layout.addLayout(self.api_key_layout)
+        self.api_key_layout_widget = self.api_key_label  # 用于显示/隐藏
+
+        # 默认只在Google时显示
+        self.api_key_label.setVisible(True)
+        self.api_key_path.setVisible(True)
+        self.btn_browse_api.setVisible(True)
+        self.on_engine_changed(self.engine_combo.currentText())
 
         # Control buttons
         h2 = QHBoxLayout()
@@ -149,6 +172,34 @@ class TranslatorGUI(QWidget):
         layout.addWidget(self.progress_extra)
 
         self.setLayout(layout)
+
+    def eventFilter(self, obj, event):
+        from PyQt5.QtCore import QEvent
+        if obj == self.api_key_path:
+            if event.type() == QEvent.DragEnter:
+                if event.mimeData().hasUrls():
+                    urls = event.mimeData().urls()
+                    if urls and urls[0].toLocalFile().lower().endswith('.json'):
+                        event.acceptProposedAction()
+                        return True
+            elif event.type() == QEvent.Drop:
+                if event.mimeData().hasUrls():
+                    urls = event.mimeData().urls()
+                    if urls and urls[0].toLocalFile().lower().endswith('.json'):
+                        self.api_key_path.setText(urls[0].toLocalFile())
+                        return True
+        return super().eventFilter(obj, event)
+
+    def browse_api_key(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, '选择Google API Key JSON', '', 'JSON Files (*.json)')
+        if file_path:
+            self.api_key_path.setText(file_path)
+
+    def on_engine_changed(self, text):
+        is_google = (text == 'Google')
+        self.api_key_label.setVisible(is_google)
+        self.api_key_path.setVisible(is_google)
+        self.btn_browse_api.setVisible(is_google)
 
     # ... export_json / export_csv / select_file implementations omitted for brevity ...
     # In practice paste your earlier implementations here (they are unchanged). 
@@ -262,6 +313,15 @@ class TranslatorGUI(QWidget):
             QMessageBox.warning(self, '提示', '请先选择文件')
             return
         engine = self.engine_combo.currentText()
+        # Google模式下检查API Key
+        if engine == 'Google':
+            api_path = self.api_key_path.text().strip()
+            if not api_path:
+                QMessageBox.warning(self, '提示', '请先导入Google API Key JSON文件')
+                return
+            # 检查环境变量
+            if not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = api_path
         self.btn_translate.setEnabled(False)
         self.btn_cancel.setEnabled(True)
 
