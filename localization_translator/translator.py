@@ -114,65 +114,42 @@ def openai_translate_text(text, target, source=None, context=None):
         return None, str(e)
 
 def translate_csv(filepath, engine, progress_callback=None):
-    df = read_csv(filepath)
-    # 找到语言列（以第二行为语言代码/名称）
-    lang_row = df.iloc[1]
-    lang_cols = {}
-    for idx, col in enumerate(df.columns):
-        lang = str(lang_row[col]).strip()
-        if lang in LANG_MAP.values() or lang in LANG_MAP.keys():
-            lang_cols[lang] = col
-    # 源语言
-    source_col = df.columns[0]
-    context_col = None
-    notes_col = None
-    for col in df.columns:
-        if 'Context' in col or '语境' in col:
-            context_col = col
-        if 'Notes' in col or '备注' in col:
-            notes_col = col
-    # 逐行翻译（从第3行到最后一个非空行）
-    last_row = len(df)
-    # 找到最后一个非空行（以源语言列为准）
-    for idx in range(len(df)-1, 1, -1):
-        if str(df.iloc[idx][source_col]).strip():
-            last_row = idx + 1
-            break
-    total = last_row - 2
-    total_langs = len(lang_cols)
-    total_tasks = total * total_langs
-    task_idx = 0
-    lang_list = list(lang_cols.items())
-    import time
-    for i in range(2, last_row):
-        row_start = time.time()
+    # 1. 解析csv为json结构（复用gui.py的export_json逻辑）
+    import pandas as pd, json, os
+    df = pd.read_csv(filepath, header=None, encoding='utf-8')
+    raw_fields = list(df.iloc[1])
+    field_names = []
+    for idx, name in enumerate(raw_fields):
+        name = str(name).strip()
+        if name and name.lower() != 'nan' and not name.startswith('Unnamed'):
+            field_names.append((idx, name))
+    data = []
+    for i in range(2, len(df)):
         row = df.iloc[i]
-        src_text = str(row[source_col])
-        context = str(row[context_col]) if context_col else ''
-        for lang_idx, (lang, col) in enumerate(lang_list):
-            # 只翻译空单元格或内容与源语言相同的单元格
-            if pd.isna(row[col]) or not str(row[col]).strip() or str(row[col]).strip() == src_text:
-                target_code = LANG_MAP.get(lang, lang)
-                if engine == 'Google':
-                    trans, err = google_translate_text(src_text, target_code, 'zh-CN')
-                else:
-                    trans, err = openai_translate_text(src_text, target_code, 'zh-CN', context)
-                if trans:
-                    df.at[i, col] = trans
-                else:
-                    if notes_col:
-                        old_note = str(df.at[i, notes_col]) if not pd.isna(df.at[i, notes_col]) else ''
-                        df.at[i, notes_col] = (old_note + '; ' if old_note else '') + f"翻译失败: {err}"
-            # 细粒度进度信息（每个语种）
-            if progress_callback:
-                short_src = src_text if len(src_text) <= 20 else src_text[:17] + '...'
-                info_text = f"正在翻译{i-1}/{total}条：\"{short_src}\"->{lang}({lang_idx+1}/{total_langs})"
-                percent = int((((i-2) * total_langs) + (lang_idx + 1)) / total_tasks * 100)
-                progress_callback(percent, info_text, None)
-        # 行级进度信息（用于时间统计）
-        task_idx += total_langs
-        if progress_callback:
-            row_time = time.time() - row_start
-            progress_callback(percent, None, row_time)
-        time.sleep(0.2)
-    write_csv(df, filepath)
+        item = {}
+        for idx, name in field_names:
+            value = row[idx]
+            if pd.isna(value):
+                item[name] = None
+            else:
+                item[name] = str(value).strip()
+        if any(v not in [None, ""] for v in item.values()):
+            data.append(item)
+
+    # 2. 调用json翻译接口
+    translate_json(data, engine, filepath, progress_callback)
+
+    # 3. 翻译后写回csv（复用gui.py的export_csv逻辑）
+    import pandas as pd
+    df2 = pd.DataFrame(data)
+    columns = list(df2.columns)
+    field_row = columns
+    data_rows = df2.values.tolist()
+    # 保留原csv第一行（如有）
+    orig_first_row = list(df.iloc[0]) if len(df) > 0 else ['' for _ in columns]
+    all_rows = [orig_first_row, field_row] + data_rows
+    with open(filepath, 'w', encoding='utf-8-sig', newline='') as f:
+        import csv
+        writer = csv.writer(f)
+        for row in all_rows:
+            writer.writerow(row)
