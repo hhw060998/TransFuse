@@ -66,12 +66,13 @@ class TranslatorGUI(QWidget):
         self.btn_translate.clicked.connect(self.start_translate)
         layout.addWidget(self.btn_translate)
 
+        # 新增：进度信息标签
+        self.progress_info = QLabel('')
+        layout.addWidget(self.progress_info)
+
         self.progress = QProgressBar()
         self.progress.setAlignment(Qt.AlignCenter)
-        # 修复进度条乱码：设置合适字体
-        from PyQt5.QtGui import QFont
-        self.progress.setFont(QFont("Microsoft YaHei", 10))
-        self.progress.setFormat("%p%")  # 显式设置百分比格式，去除乱码
+        self.progress.setFormat("")  # 不显示数字
         layout.addWidget(self.progress)
 
         self.setLayout(layout)
@@ -208,8 +209,11 @@ class TranslatorGUI(QWidget):
 
     def run_translate(self, engine):
         try:
-            def progress_callback(val):
+            def progress_callback(val, info_text=None):
                 self.progress_signal.emit(val)
+                if info_text is not None:
+                    from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
+                    QMetaObject.invokeMethod(self.progress_info, "setText", Qt.QueuedConnection, Q_ARG(str, info_text))
             if self.is_json:
                 from utils import read_json, write_json
                 data = read_json(self.csv_path)
@@ -222,7 +226,6 @@ class TranslatorGUI(QWidget):
         except Exception as e:
             self.finish_signal.emit('error', str(e))
         finally:
-            # 需要在主线程恢复按钮
             self.progress_signal.emit(100)
             self.finish_signal.emit('enable_btn', '')
 

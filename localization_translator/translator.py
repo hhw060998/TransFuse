@@ -25,10 +25,13 @@ def translate_json(data, engine, filepath, progress_callback=None):
             break
     # 目标语言列
     lang_cols = [k for k in keys if k not in [source_col, context_col, notes_col, 'Tag', 'Plural']]
+    total_langs = len(lang_cols)
+    total_tasks = total * total_langs
+    task_idx = 0
     for i, row in enumerate(data):
         src_text = str(row.get(source_col, ''))
         context = str(row.get(context_col, '')) if context_col else ''
-        for lang in lang_cols:
+        for lang_idx, lang in enumerate(lang_cols):
             val = row.get(lang, None)
             if val is None or str(val).strip() == '' or str(val).strip() == src_text:
                 target_code = lang
@@ -36,7 +39,6 @@ def translate_json(data, engine, filepath, progress_callback=None):
                     trans, err = google_translate_text(src_text, target_code, 'zh-CN')
                 else:
                     trans, err = openai_translate_text(src_text, target_code, 'zh-CN', context)
-                # 打印前5条的翻译内容
                 if i < 5:
                     print(f"第{i+1}条，源文: {src_text}，目标: {target_code}，返回: {trans if trans else err}")
                 if trans:
@@ -45,8 +47,13 @@ def translate_json(data, engine, filepath, progress_callback=None):
                     if notes_col:
                         old_note = str(row.get(notes_col, '')) if row.get(notes_col) else ''
                         row[notes_col] = (old_note + '; ' if old_note else '') + f"翻译失败: {err}"
-        if progress_callback:
-            progress_callback(int((i+1)/total*100))
+                # 进度信息（仅在需要翻译时调用）
+                task_idx += 1
+                if progress_callback:
+                    short_src = src_text if len(src_text) <= 20 else src_text[:17] + '...'
+                    info_text = f"正在翻译{i+1}/{total}条：\"{short_src}\"->{target_code}({lang_idx+1}/{total_langs})"
+                    percent = int(task_idx / total_tasks * 100)
+                    progress_callback(percent, info_text)
     write_json(data, filepath)
 import os
 import openai
@@ -125,11 +132,16 @@ def translate_csv(filepath, engine, progress_callback=None):
         if str(df.iloc[idx][source_col]).strip():
             last_row = idx + 1
             break
+    total = last_row - 2
+    total_langs = len(lang_cols)
+    total_tasks = total * total_langs
+    task_idx = 0
+    lang_list = list(lang_cols.items())
     for i in range(2, last_row):
         row = df.iloc[i]
         src_text = str(row[source_col])
         context = str(row[context_col]) if context_col else ''
-        for lang, col in lang_cols.items():
+        for lang_idx, (lang, col) in enumerate(lang_list):
             # 只翻译空单元格或内容与源语言相同的单元格
             if pd.isna(row[col]) or not str(row[col]).strip() or str(row[col]).strip() == src_text:
                 target_code = LANG_MAP.get(lang, lang)
@@ -143,7 +155,12 @@ def translate_csv(filepath, engine, progress_callback=None):
                     if notes_col:
                         old_note = str(df.at[i, notes_col]) if not pd.isna(df.at[i, notes_col]) else ''
                         df.at[i, notes_col] = (old_note + '; ' if old_note else '') + f"翻译失败: {err}"
-        if progress_callback:
-            progress_callback(int((i-1)/(last_row-2)*100))
+            # 进度信息
+            task_idx += 1
+            if progress_callback:
+                short_src = src_text if len(src_text) <= 20 else src_text[:17] + '...'
+                info_text = f"正在翻译{i-1}/{total}条：\"{short_src}\"->{lang}({lang_idx+1}/{total_langs})"
+                percent = int(task_idx / total_tasks * 100)
+                progress_callback(percent, info_text)
         time.sleep(0.2)
     write_csv(df, filepath)
