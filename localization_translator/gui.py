@@ -56,10 +56,17 @@ class TranslatorGUI(QWidget):
         self.progress.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.progress)
 
-        # 新增：导出为JSON按钮
+
+        # 导出为JSON按钮
         self.btn_export_json = QPushButton('导出为JSON')
         self.btn_export_json.clicked.connect(self.export_json)
         layout.addWidget(self.btn_export_json)
+
+        # 新增：导出为CSV按钮（仅json文件时显示）
+        self.btn_export_csv = QPushButton('导出为CSV')
+        self.btn_export_csv.clicked.connect(self.export_csv)
+        self.btn_export_csv.setVisible(False)
+        layout.addWidget(self.btn_export_csv)
 
         self.setLayout(layout)
 
@@ -78,6 +85,7 @@ class TranslatorGUI(QWidget):
                     self.is_json = file_path.lower().endswith('.json')
                     self.label.setText(f'已选择：{file_path}')
                     self.btn_export_json.setVisible(not self.is_json)
+                    self.btn_export_csv.setVisible(self.is_json)
                     return True
         return super().eventFilter(obj, event)
 
@@ -134,6 +142,38 @@ class TranslatorGUI(QWidget):
             self.is_json = file_path.lower().endswith('.json')
             self.label.setText(f'已选择：{file_path}')
             self.btn_export_json.setVisible(not self.is_json)
+            self.btn_export_csv.setVisible(self.is_json)
+    def export_csv(self):
+        import pandas as pd
+        import os
+        from utils import read_json
+        if not self.csv_path or not self.is_json:
+            QMessageBox.warning(self, '提示', '请先选择JSON文件')
+            return
+        try:
+            data = read_json(self.csv_path)
+            if not data:
+                QMessageBox.warning(self, '提示', 'JSON文件无数据')
+                return
+            df = pd.DataFrame(data)
+            # 构造新DataFrame，第一行全空，第二行为字段名，第三行开始为数据
+            columns = list(df.columns)
+            empty_row = ['' for _ in columns]
+            # 字段名行
+            field_row = columns
+            # 数据行
+            data_rows = df.values.tolist()
+            all_rows = [empty_row, field_row] + data_rows
+            # 导出到同级目录
+            csv_path = os.path.splitext(self.csv_path)[0] + '_fromjson.csv'
+            import csv
+            with open(csv_path, 'w', encoding='utf-8-sig', newline='') as f:
+                writer = csv.writer(f)
+                for row in all_rows:
+                    writer.writerow(row)
+            QMessageBox.information(self, '导出成功', f'已保存为：{csv_path}')
+        except Exception as e:
+            QMessageBox.critical(self, '错误', f'导出CSV失败：{e}')
 
     def start_translate(self):
         if not self.csv_path:
