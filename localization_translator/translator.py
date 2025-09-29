@@ -36,6 +36,9 @@ def translate_json(data, engine, filepath, progress_callback=None):
                     trans, err = google_translate_text(src_text, target_code, 'zh-CN')
                 else:
                     trans, err = openai_translate_text(src_text, target_code, 'zh-CN', context)
+                # 打印前5条的翻译内容
+                if i < 5:
+                    print(f"第{i+1}条，源文: {src_text}，目标: {target_code}，返回: {trans if trans else err}")
                 if trans:
                     row[lang] = trans
                 else:
@@ -70,10 +73,13 @@ def get_google_client():
 
 # 调用Google翻译
 def google_translate_text(text, target, source=None):
+    # 跳过源语言和目标语言相同的情况
+    if source and target and source.lower() == target.lower():
+        return text, None
     client = get_google_client()
     try:
         result = client.translate(text, target_language=target, source_language=source)
-        return result['translatedText']
+        return result['translatedText'], None
     except Exception as e:
         return None, str(e)
 
@@ -82,6 +88,7 @@ def openai_translate_text(text, target, source=None, context=None):
     prompt = f"将以下内容从{source or '原文'}翻译为{target}。\n上下文：{context or ''}\n原文：{text}\n翻译："
     try:
         api_key = os.getenv('OPENAI_API_KEY')
+        print("当前使用的OPENAI_API_KEY:", api_key)
         client = openai.OpenAI(api_key=api_key)  # 新版用OpenAI类
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
