@@ -266,26 +266,8 @@ class TranslatorGUI(QWidget):
             columns = list(df.columns)
             field_row = columns
             data_rows = df.values.tolist()
-            # 保留原csv第一行（如有）
-            orig_csv_path = os.path.splitext(self.csv_path)[0] + '.csv'
-            orig_first_row = None
-            if os.path.exists(orig_csv_path):
-                import csv
-                with open(orig_csv_path, 'r', encoding='utf-8-sig') as f:
-                    reader = csv.reader(f)
-                    try:
-                        orig_first_row = next(reader)
-                    except StopIteration:
-                        orig_first_row = None
-            # 组装新csv内容
-            all_rows = []
-            if orig_first_row:
-                all_rows.append(orig_first_row)
-            else:
-                all_rows.append(['' for _ in columns])
-            all_rows.append(field_row)
-            all_rows += data_rows
-            # 导出到同级目录
+            # 只写字段名和数据行，不写原csv第一行
+            all_rows = [field_row] + data_rows
             csv_path = os.path.splitext(self.csv_path)[0] + '.csv'
             import csv
             with open(csv_path, 'w', encoding='utf-8-sig', newline='') as f:
