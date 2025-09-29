@@ -1,3 +1,50 @@
+def translate_json(data, engine, filepath, progress_callback=None):
+    # data: list[dict]，每个dict为一条数据，字段名为key
+    import pandas as pd
+    from utils import write_json
+    total = len(data)
+    # 识别所有语言字段（排除源语言、Tag、Context、Plural、Notes等）
+    if total == 0:
+        return
+    keys = list(data[0].keys())
+    # 源语言字段
+    source_col = None
+    for k in keys:
+        if k.lower().startswith('source') or k == '源语言' or k == 'SourceZH':
+            source_col = k
+            break
+    context_col = None
+    for k in keys:
+        if 'context' in k.lower() or '语境' in k:
+            context_col = k
+            break
+    notes_col = None
+    for k in keys:
+        if 'notes' in k.lower() or '备注' in k:
+            notes_col = k
+            break
+    # 目标语言列
+    lang_cols = [k for k in keys if k not in [source_col, context_col, notes_col, 'Tag', 'Plural']]
+    for i, row in enumerate(data):
+        src_text = str(row.get(source_col, ''))
+        context = str(row.get(context_col, '')) if context_col else ''
+        for lang in lang_cols:
+            val = row.get(lang, None)
+            if val is None or str(val).strip() == '' or str(val).strip() == src_text:
+                target_code = lang
+                if engine == 'Google':
+                    trans, err = google_translate_text(src_text, target_code, 'zh-CN')
+                else:
+                    trans, err = openai_translate_text(src_text, target_code, 'zh-CN', context)
+                if trans:
+                    row[lang] = trans
+                else:
+                    if notes_col:
+                        old_note = str(row.get(notes_col, '')) if row.get(notes_col) else ''
+                        row[notes_col] = (old_note + '; ' if old_note else '') + f"翻译失败: {err}"
+        if progress_callback:
+            progress_callback(int((i+1)/total*100))
+    write_json(data, filepath)
 import os
 import openai
 from google.cloud import translate_v2 as google_translate
@@ -31,11 +78,12 @@ def google_translate_text(text, target, source=None):
         return None, str(e)
 
 # 调用OpenAI翻译
-openai.api_key = os.getenv('OPENAI_API_KEY')
 def openai_translate_text(text, target, source=None, context=None):
     prompt = f"将以下内容从{source or '原文'}翻译为{target}。\n上下文：{context or ''}\n原文：{text}\n翻译："
     try:
-        response = openai.ChatCompletion.create(
+        api_key = os.getenv('OPENAI_API_KEY')
+        client = openai.OpenAI(api_key=api_key)  # 新版用OpenAI类
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
