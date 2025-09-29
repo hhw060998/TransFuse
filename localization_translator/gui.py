@@ -220,7 +220,7 @@ class TranslatorGUI(QWidget):
             self._progress_total_tasks = None
             def progress_callback(val, info_text=None, row_time=None):
                 self.progress_signal.emit(val)
-                # 进度信息
+                # 进度信息（细粒度语种进度）
                 if info_text is not None:
                     from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
                     QMetaObject.invokeMethod(self.progress_info, "setText", Qt.QueuedConnection, Q_ARG(str, info_text))

@@ -49,14 +49,17 @@ def translate_json(data, engine, filepath, progress_callback=None):
                     if notes_col:
                         old_note = str(row.get(notes_col, '')) if row.get(notes_col) else ''
                         row[notes_col] = (old_note + '; ' if old_note else '') + f"翻译失败: {err}"
-        # 进度信息（每条数据行翻译完后回调）
+            # 细粒度进度信息（每个语种）
+            if progress_callback:
+                short_src = src_text if len(src_text) <= 20 else src_text[:17] + '...'
+                info_text = f"正在翻译{i+1}/{total}条：\"{short_src}\"->{lang}({lang_idx+1}/{total_langs})"
+                percent = int(((i * total_langs) + (lang_idx + 1)) / total_tasks * 100)
+                progress_callback(percent, info_text, None)
+        # 行级进度信息（用于时间统计）
         task_idx += total_langs
         if progress_callback:
-            short_src = src_text if len(src_text) <= 20 else src_text[:17] + '...'
-            info_text = f"正在翻译{i+1}/{total}条：\"{short_src}\""
-            percent = int(task_idx / total_tasks * 100)
             row_time = time.time() - row_start
-            progress_callback(percent, info_text, row_time)
+            progress_callback(percent, None, row_time)
     write_json(data, filepath)
 import os
 import openai
@@ -160,13 +163,16 @@ def translate_csv(filepath, engine, progress_callback=None):
                     if notes_col:
                         old_note = str(df.at[i, notes_col]) if not pd.isna(df.at[i, notes_col]) else ''
                         df.at[i, notes_col] = (old_note + '; ' if old_note else '') + f"翻译失败: {err}"
-        # 进度信息（每条数据行翻译完后回调）
+            # 细粒度进度信息（每个语种）
+            if progress_callback:
+                short_src = src_text if len(src_text) <= 20 else src_text[:17] + '...'
+                info_text = f"正在翻译{i-1}/{total}条：\"{short_src}\"->{lang}({lang_idx+1}/{total_langs})"
+                percent = int((((i-2) * total_langs) + (lang_idx + 1)) / total_tasks * 100)
+                progress_callback(percent, info_text, None)
+        # 行级进度信息（用于时间统计）
         task_idx += total_langs
         if progress_callback:
-            short_src = src_text if len(src_text) <= 20 else src_text[:17] + '...'
-            info_text = f"正在翻译{i-1}/{total}条：\"{short_src}\""
-            percent = int(task_idx / total_tasks * 100)
             row_time = time.time() - row_start
-            progress_callback(percent, info_text, row_time)
+            progress_callback(percent, None, row_time)
         time.sleep(0.2)
     write_csv(df, filepath)
