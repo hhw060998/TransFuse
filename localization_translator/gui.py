@@ -75,6 +75,10 @@ class TranslatorGUI(QWidget):
         self.progress.setFormat("")  # 不显示数字
         layout.addWidget(self.progress)
 
+        # 新增：进度百分比和预计时间标签
+        self.progress_extra = QLabel('')
+        layout.addWidget(self.progress_extra)
+
         self.setLayout(layout)
 
     def eventFilter(self, obj, event):
@@ -208,12 +212,40 @@ class TranslatorGUI(QWidget):
 
 
     def run_translate(self, engine):
+        import time
         try:
-            def progress_callback(val, info_text=None):
+            self._progress_times = []  # 记录每条数据行翻译耗时
+            self._progress_total = None
+            self._progress_done = 0
+            self._progress_total_tasks = None
+            def progress_callback(val, info_text=None, row_time=None):
                 self.progress_signal.emit(val)
+                # 进度信息
                 if info_text is not None:
                     from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
                     QMetaObject.invokeMethod(self.progress_info, "setText", Qt.QueuedConnection, Q_ARG(str, info_text))
+                # 进度百分比和预计时间（每条数据行统计一次）
+                if row_time is not None:
+                    self._progress_times.append(row_time)
+                    if len(self._progress_times) > 10:
+                        self._progress_times = self._progress_times[-10:]
+                    self._progress_done += 1
+                percent = min(max(val, 0), 100)
+                # 预计剩余时间
+                done = len(self._progress_times)
+                if done < 3:
+                    eta_text = '正在预估完成时间...'
+                else:
+                    avg = sum(self._progress_times) / len(self._progress_times)
+                    remain_tasks = max(0, 100 - self._progress_done) if self._progress_total_tasks is None else max(0, self._progress_total_tasks - self._progress_done)
+                    eta_sec = int(avg * remain_tasks)
+                    if eta_sec < 60:
+                        eta_text = f'预计剩余{eta_sec}秒'
+                    else:
+                        eta_text = f'预计剩余{eta_sec//60}分{eta_sec%60}秒'
+                text = f'{percent:.1f}%  {eta_text}'
+                from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
+                QMetaObject.invokeMethod(self.progress_extra, "setText", Qt.QueuedConnection, Q_ARG(str, text))
             if self.is_json:
                 from utils import read_json, write_json
                 data = read_json(self.csv_path)

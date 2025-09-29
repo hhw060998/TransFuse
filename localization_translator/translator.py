@@ -28,7 +28,9 @@ def translate_json(data, engine, filepath, progress_callback=None):
     total_langs = len(lang_cols)
     total_tasks = total * total_langs
     task_idx = 0
+    import time
     for i, row in enumerate(data):
+        row_start = time.time()
         src_text = str(row.get(source_col, ''))
         context = str(row.get(context_col, '')) if context_col else ''
         for lang_idx, lang in enumerate(lang_cols):
@@ -47,13 +49,14 @@ def translate_json(data, engine, filepath, progress_callback=None):
                     if notes_col:
                         old_note = str(row.get(notes_col, '')) if row.get(notes_col) else ''
                         row[notes_col] = (old_note + '; ' if old_note else '') + f"翻译失败: {err}"
-                # 进度信息（仅在需要翻译时调用）
-                task_idx += 1
-                if progress_callback:
-                    short_src = src_text if len(src_text) <= 20 else src_text[:17] + '...'
-                    info_text = f"正在翻译{i+1}/{total}条：\"{short_src}\"->{target_code}({lang_idx+1}/{total_langs})"
-                    percent = int(task_idx / total_tasks * 100)
-                    progress_callback(percent, info_text)
+        # 进度信息（每条数据行翻译完后回调）
+        task_idx += total_langs
+        if progress_callback:
+            short_src = src_text if len(src_text) <= 20 else src_text[:17] + '...'
+            info_text = f"正在翻译{i+1}/{total}条：\"{short_src}\""
+            percent = int(task_idx / total_tasks * 100)
+            row_time = time.time() - row_start
+            progress_callback(percent, info_text, row_time)
     write_json(data, filepath)
 import os
 import openai
@@ -137,7 +140,9 @@ def translate_csv(filepath, engine, progress_callback=None):
     total_tasks = total * total_langs
     task_idx = 0
     lang_list = list(lang_cols.items())
+    import time
     for i in range(2, last_row):
+        row_start = time.time()
         row = df.iloc[i]
         src_text = str(row[source_col])
         context = str(row[context_col]) if context_col else ''
@@ -155,12 +160,13 @@ def translate_csv(filepath, engine, progress_callback=None):
                     if notes_col:
                         old_note = str(df.at[i, notes_col]) if not pd.isna(df.at[i, notes_col]) else ''
                         df.at[i, notes_col] = (old_note + '; ' if old_note else '') + f"翻译失败: {err}"
-            # 进度信息
-            task_idx += 1
-            if progress_callback:
-                short_src = src_text if len(src_text) <= 20 else src_text[:17] + '...'
-                info_text = f"正在翻译{i-1}/{total}条：\"{short_src}\"->{lang}({lang_idx+1}/{total_langs})"
-                percent = int(task_idx / total_tasks * 100)
-                progress_callback(percent, info_text)
+        # 进度信息（每条数据行翻译完后回调）
+        task_idx += total_langs
+        if progress_callback:
+            short_src = src_text if len(src_text) <= 20 else src_text[:17] + '...'
+            info_text = f"正在翻译{i-1}/{total}条：\"{short_src}\""
+            percent = int(task_idx / total_tasks * 100)
+            row_time = time.time() - row_start
+            progress_callback(percent, info_text, row_time)
         time.sleep(0.2)
     write_csv(df, filepath)
