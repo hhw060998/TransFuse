@@ -1,4 +1,4 @@
-# 本地化翻译工具（Localization Translator）
+# 本地化翻译工具（TransFuse）
 
 ## 简介
 
@@ -34,7 +34,7 @@
 
 ---
 
-# Localization Translator
+# TransFuse
 
 ## Introduction
 
