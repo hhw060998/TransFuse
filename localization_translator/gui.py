@@ -24,6 +24,7 @@ class TranslatorGUI(QWidget):
 
 
     def init_ui(self):
+        from PyQt5.QtWidgets import QHBoxLayout
         layout = QVBoxLayout()
 
         self.label = QLabel('请选择文件（CSV或JSON）：')
@@ -32,9 +33,22 @@ class TranslatorGUI(QWidget):
         self.label.setAcceptDrops(True)
         self.label.installEventFilter(self)
 
+        # 横向布局：选择文件、导出为JSON、导出为CSV
+        h_btns = QHBoxLayout()
         self.btn_select = QPushButton('选择文件')
         self.btn_select.clicked.connect(self.select_file)
-        layout.addWidget(self.btn_select)
+        h_btns.addWidget(self.btn_select)
+
+        self.btn_export_json = QPushButton('导出为JSON')
+        self.btn_export_json.clicked.connect(self.export_json)
+        h_btns.addWidget(self.btn_export_json)
+
+        self.btn_export_csv = QPushButton('导出为CSV')
+        self.btn_export_csv.clicked.connect(self.export_csv)
+        self.btn_export_csv.setVisible(False)
+        h_btns.addWidget(self.btn_export_csv)
+
+        layout.addLayout(h_btns)
 
         # 默认文件路径
         default_path = r'D:\RgClient\Assets\Shared\GameRes\Localization\多语言表.csv'
@@ -54,19 +68,11 @@ class TranslatorGUI(QWidget):
 
         self.progress = QProgressBar()
         self.progress.setAlignment(Qt.AlignCenter)
+        # 修复进度条乱码：设置合适字体
+        from PyQt5.QtGui import QFont
+        self.progress.setFont(QFont("Microsoft YaHei", 10))
+        self.progress.setFormat("%p%")  # 显式设置百分比格式，去除乱码
         layout.addWidget(self.progress)
-
-
-        # 导出为JSON按钮
-        self.btn_export_json = QPushButton('导出为JSON')
-        self.btn_export_json.clicked.connect(self.export_json)
-        layout.addWidget(self.btn_export_json)
-
-        # 新增：导出为CSV按钮（仅json文件时显示）
-        self.btn_export_csv = QPushButton('导出为CSV')
-        self.btn_export_csv.clicked.connect(self.export_csv)
-        self.btn_export_csv.setVisible(False)
-        layout.addWidget(self.btn_export_csv)
 
         self.setLayout(layout)
 
@@ -143,6 +149,7 @@ class TranslatorGUI(QWidget):
             self.label.setText(f'已选择：{file_path}')
             self.btn_export_json.setVisible(not self.is_json)
             self.btn_export_csv.setVisible(self.is_json)
+            
     def export_csv(self):
         import pandas as pd
         import os
@@ -156,14 +163,28 @@ class TranslatorGUI(QWidget):
                 QMessageBox.warning(self, '提示', 'JSON文件无数据')
                 return
             df = pd.DataFrame(data)
-            # 构造新DataFrame，第一行全空，第二行为字段名，第三行开始为数据
             columns = list(df.columns)
-            empty_row = ['' for _ in columns]
-            # 字段名行
             field_row = columns
-            # 数据行
             data_rows = df.values.tolist()
-            all_rows = [empty_row, field_row] + data_rows
+            # 保留原csv第一行（如有）
+            orig_csv_path = os.path.splitext(self.csv_path)[0] + '.csv'
+            orig_first_row = None
+            if os.path.exists(orig_csv_path):
+                import csv
+                with open(orig_csv_path, 'r', encoding='utf-8-sig') as f:
+                    reader = csv.reader(f)
+                    try:
+                        orig_first_row = next(reader)
+                    except StopIteration:
+                        orig_first_row = None
+            # 组装新csv内容
+            all_rows = []
+            if orig_first_row:
+                all_rows.append(orig_first_row)
+            else:
+                all_rows.append(['' for _ in columns])
+            all_rows.append(field_row)
+            all_rows += data_rows
             # 导出到同级目录
             csv_path = os.path.splitext(self.csv_path)[0] + '.csv'
             import csv
